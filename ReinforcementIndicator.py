@@ -3,16 +3,21 @@ import pandas as pd
 import random
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import sys
+import os
 
 from DiscretizedEnvironment import DiscretizedEnvironment
 #from Environment import Environment
 
 class ReinforcementIndicator:
 
-    def __init__(self):
+    def __init__(
+        self,
+        stock
+    ):
         self.dataFrame = pd.read_csv(
             'spx_intraday.csv', index_col=0, header=[0, 1]
-        ).sort_index(axis=1)
+        ).sort_index(axis=1)[stock]
 
         # Env Parameters
         n_input = 49 # Num states
@@ -20,6 +25,7 @@ class ReinforcementIndicator:
 
         self.num_actions = n_classes
         self.num_states = n_input
+        self.stock = stock
 
     def multilayer_perceptron(
         self,
@@ -51,16 +57,17 @@ class ReinforcementIndicator:
 
     def train(
         self,
-        stock,
         # Set learning hyper parameters
         network_shape=[49,256,256,7],
         learning_rate=0.01,
         y=.99,
         e=.01,
         initialization_period=10,
+        initial_offset=2000,
         num_epochs=100,
         time_horizon=1000,
-        verbose=False
+        verbose=False,
+        test_number=0,
     ):
         #with tf.device("/gpu:0"):
         self.network = self.multilayer_perceptron(shape=network_shape)
@@ -77,8 +84,8 @@ class ReinforcementIndicator:
 
         self.env = DiscretizedEnvironment(
             self.dataFrame,
-            stock=stock,
             initializationPeriod=initialization_period,
+            initialOffset=initial_offset,
         )
 
         #create a list to contain total rewards
@@ -86,7 +93,7 @@ class ReinforcementIndicator:
         with tf.Session() as sess:
             sess.run(init)
             for i in range(num_epochs):
-                print "epoch: ", i
+                #print "epoch: ", i
                 # Reset environment and get first new observation
                 s = self.env.reset()
                 rAll = 0
@@ -134,7 +141,10 @@ class ReinforcementIndicator:
 
         if(verbose):
             plt.plot(rList)
-            plt.show()
+            fig_name = './'+ self.stock + '/' + self.stock + '_trainNN_' + str(test_number) + '.png'
+            plt.savefig(fig_name)
+            plt.close()
+            #plt.show()
             print np.max(rList), np.min(rList), np.mean(rList)
             print (np.asarray(rList) > 0).sum()
 
@@ -142,10 +152,10 @@ class ReinforcementIndicator:
 
     def dev(
         self,
-        stock,
         shape=[49,256,256,7],
-        random_iterations=25,
-        dev_horizon = 500
+        random_iterations=50,
+        dev_horizon = 500,
+        initial_offset=2000,
     ):
         paramSet = []
         for i in range(random_iterations):
@@ -170,12 +180,13 @@ class ReinforcementIndicator:
                 'e': e,
                 'y': y,
                 'initialization_period': initialization_period,
+                'initial_offset': initial_offset,
             })
 
         results = []
         for params in paramSet:
-            print 'training for params: ' + str(params)
-            self.train(stock, **params)
+            #print 'training for params: ' + str(params)
+            self.train(**params)
             results.append(self.test(dev_horizon))
 
         return paramSet[results.index(max(results))]
@@ -184,7 +195,8 @@ class ReinforcementIndicator:
         self,
         test_time_horizon,
         ignore_offset=0,
-        verbose=False
+        verbose=False,
+        test_number=0,
     ):
         Qout = self.network
         predict = tf.argmax(Qout,1)
@@ -214,18 +226,38 @@ class ReinforcementIndicator:
 
         if(verbose):
             plt.plot(rAllList)
-            plt.show()
-            print np.max(rList), np.min(rList), np.mean(rList)
+            fig_name = './'+ self.stock + '/' + self.stock + '_testNN_' + str(test_number) + '.png'
+            plt.savefig(fig_name)
+            plt.close()
+            #plt.show()
+            print np.max(rList), np.min(rList), np.mean(rList), np.max(rAllList)
             print (np.asarray(rList) > 0).sum()
 
         return np.sum(rList)
 
     def testSelected(
         self,
-        stock,
     ):
-        params = self.dev(stock,dev_horizon=500)
-        print 'training with: ' + str(params)
-        params['verbose'] = True
-        self.train(stock, **params )
-        self.test(1000,ignore_offset=500, verbose=True)
+        if not os.path.exists(self.stock):
+            os.makedirs(self.stock)
+
+        orig_stdout = sys.stdout
+        file_name = './'+ self.stock + '/' + self.stock + '_NN.txt'
+        f = open(file_name, 'w')
+        sys.stdout = f
+
+        allRes = []
+        for i in range(5):
+            params = self.dev(dev_horizon=500, initial_offset=i*1000)
+            print 'training with: ' + str(params)
+            params['initial_offset'] = i*1000
+            params['verbose'] = True
+            params['test_number'] = i
+            self.train(**params )
+            self.test(1000,ignore_offset=500, verbose=True, test_number=i)
+        #plt.plot(allRes)
+        #plt.show()
+        print (np.asarray(allRes) > 0).sum()
+
+        sys.stdout = orig_stdout
+        f.close()

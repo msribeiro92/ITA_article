@@ -3,6 +3,8 @@ import pandas as pd
 import random
 import tensorflow as tf
 import matplotlib.pyplot as plt
+import sys
+import os
 
 from DiscretizedEnvironment import DiscretizedEnvironment
 #from Environment import Environment
@@ -17,8 +19,13 @@ class TableReinforcementIndicator:
             'spx_intraday.csv', index_col=0, header=[0, 1]
         ).sort_index(axis=1)[stock]
 
-        #fileName = stock + '_data.csv'
-        #self.dataFrame = self.dataFrame =  pd.read_csv('/home/marcel/article/individual_stocks_5yr/' + fileName)
+        self.priceData = np.array(self.dataFrame["close"])
+        print len(self.priceData)
+        print 0, self.priceData[1999], self.priceData[1500], self.priceData[1999] - self.priceData[1500]
+        print 1, self.priceData[2999], self.priceData[2500], self.priceData[2999] - self.priceData[2500]
+        print 2, self.priceData[3999], self.priceData[3500], self.priceData[3999] - self.priceData[3500]
+        print 3, self.priceData[4999], self.priceData[4500], self.priceData[4999] - self.priceData[4500]
+        print 4, self.priceData[5999], self.priceData[5500], self.priceData[5999] - self.priceData[5500]
 
         # Env Parameters
         n_input = 49 # Num states
@@ -26,6 +33,7 @@ class TableReinforcementIndicator:
 
         self.num_actions = n_classes
         self.num_states = n_input
+        self.stock = stock
 
     def train(
         self,
@@ -37,7 +45,8 @@ class TableReinforcementIndicator:
         initial_offset=2000,
         num_epochs=100,
         time_horizon=1000,
-        verbose=False
+        verbose=False,
+        test_number=0,
     ):
         #Initialize table with all zeros
         self.Q = np.zeros([self.num_states,self.num_actions])
@@ -81,7 +90,10 @@ class TableReinforcementIndicator:
 
         if(verbose):
             plt.plot(rList)
-            plt.show()
+            fig_name = './'+ self.stock + '/' + self.stock + '_trainT_' + str(test_number) + '.png'
+            plt.savefig(fig_name)
+            plt.close()
+            #plt.show()
             print np.max(rList), np.min(rList), np.mean(rList)
             print (np.asarray(rList) > 0).sum()
 
@@ -111,7 +123,7 @@ class TableReinforcementIndicator:
 
         results = []
         for params in paramSet:
-            print 'training for params: ' + str(params)
+            #print 'training for params: ' + str(params)
             self.train(**params)
             results.append(self.test(dev_horizon))
 
@@ -121,7 +133,8 @@ class TableReinforcementIndicator:
         self,
         test_time_horizon,
         ignore_offset=0,
-        verbose=False
+        verbose=False,
+        test_number=0,
     ):
         Qout = self.Q
         predict = tf.argmax(Qout,1)
@@ -146,8 +159,11 @@ class TableReinforcementIndicator:
 
         if(verbose):
             plt.plot(rAllList)
-            plt.show()
-            print np.max(rList), np.min(rList), np.mean(rList)
+            fig_name = './'+ self.stock + '/' + self.stock + '_testT_' + str(test_number) + '.png'
+            plt.savefig(fig_name)
+            plt.close()
+            #plt.show()
+            print np.max(rList), np.min(rList), np.mean(rList), np.max(rAllList)
             print (np.asarray(rList) > 0).sum()
 
         return np.sum(rList)
@@ -155,14 +171,29 @@ class TableReinforcementIndicator:
     def testSelected(
         self,
     ):
+        if not os.path.exists(self.stock):
+            os.makedirs(self.stock)
+
+        orig_stdout = sys.stdout
+        file_name = './'+ self.stock + '/' + self.stock + '_T.txt'
+        f = open(file_name, 'w')
+        sys.stdout = f
+
         allRes = []
         for i in range(5):
+            print 'test ' + str(i)
             params = self.dev(dev_horizon=500, initial_offset=i*1000)
             print 'training with: ' + str(params)
             params['initial_offset'] = i*1000
+            params['verbose'] = True
+            params['test_number'] = i
             self.train(**params )
-            res = self.test(1000,ignore_offset=500)
+            res = self.test(1000,ignore_offset=500, verbose=True, test_number=i)
             allRes.append(res)
-        plt.plot(allRes)
-        plt.show()
+            print '\n'
+        #plt.plot(allRes)
+        #plt.show()
         print (np.asarray(allRes) > 0).sum()
+
+        sys.stdout = orig_stdout
+        f.close()
