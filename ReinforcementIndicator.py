@@ -81,6 +81,7 @@ class ReinforcementIndicator:
         updateModel = trainer.minimize(loss)
 
         init = tf.global_variables_initializer()
+        saver = tf.train.Saver()
 
         self.env = DiscretizedEnvironment(
             self.dataFrame,
@@ -138,10 +139,11 @@ class ReinforcementIndicator:
                     e = 1./((i/50) + 10)
 
                 rList.append(rAll)
+            save_path = saver.save(sess, "/tmp/reinforcement_model.ckpt")
 
         if(verbose):
             plt.plot(rList)
-            fig_name = './'+ self.stock + '/' + self.stock + '_trainNN_' + str(test_number) + '.png'
+            fig_name = './'+ self.stock + '/' + self.stock + '_trainNN_' + str(test_number) + '_2.png'
             plt.savefig(fig_name)
             plt.close()
             #plt.show()
@@ -206,9 +208,11 @@ class ReinforcementIndicator:
         rList = []
         rAll = 0
         rAllList = []
-        init = tf.global_variables_initializer()
+
+        saver = tf.train.Saver()
         with tf.Session() as sess:
-            sess.run(init)
+            saver.restore(sess, "/tmp/reinforcement_model.ckpt")
+
             for i in range(test_time_horizon):
                 # Choose an action by from the Q-network
                 a,allQ = sess.run(
@@ -226,7 +230,7 @@ class ReinforcementIndicator:
 
         if(verbose):
             plt.plot(rAllList)
-            fig_name = './'+ self.stock + '/' + self.stock + '_testNN_' + str(test_number) + '.png'
+            fig_name = './'+ self.stock + '/' + self.stock + '_testNN_' + str(test_number) + '_2.png'
             plt.savefig(fig_name)
             plt.close()
             #plt.show()
@@ -242,7 +246,7 @@ class ReinforcementIndicator:
             os.makedirs(self.stock)
 
         orig_stdout = sys.stdout
-        file_name = './'+ self.stock + '/' + self.stock + '_NN.txt'
+        file_name = './'+ self.stock + '/' + self.stock + '_NN_2.txt'
         f = open(file_name, 'w')
         sys.stdout = f
 
